@@ -1,14 +1,11 @@
 package com.example.sensors.core
 
 data class ReadSensorEvent(
-    // 1. X, Y, Z from the Accelerometer
-    val accelerometerValues: FloatArray,
 
-    // 2. X, Y, Z from the Gyroscope (nullable because Algorithm 1 might not use it,
-    // or you might receive them at different times, but usually we try to sync them)
+    // (X, Y, Z)
+    val accelerometerValues: FloatArray,
     val gyroscopeValues: FloatArray,
 
-    // 3. The time this reading happened (crucial for integration/algorithms)
     val timestamp: Long = System.currentTimeMillis()
 ) {
 

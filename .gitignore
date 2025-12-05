@@ -1,0 +1,62 @@
+# Built application files
+*.apk
+*.ap_
+*.aab
+
+# ART/Dalvik VM files
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+generated/
+
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (SDK path, keystore path, etc.)
+local.properties
+
+# Proguard
+proguard/
+proguard-rules.pro~
+
+# Log files
+*.log
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures
+captures/
+
+# IntelliJ / Android Studio specific
+*.iml
+.idea/
+.idea/*
+
+# NDK
+obj/
+
+# Node / React Native (if used)
+node_modules/
+*.lock
+
+# Backup files
+*.orig
+*.rej
+
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Kotlin
+**/build/
