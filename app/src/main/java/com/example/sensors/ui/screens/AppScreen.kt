@@ -1,61 +1,43 @@
 package com.example.sensors.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.sensors.viewmodels.FakeVM
-import com.example.sensors.viewmodels.SensorViewModel
-import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.sensors.core.TimeSet
+import com.example.sensors.viewmodels.FakeVM
+import com.example.sensors.viewmodels.SensorViewModel
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScreen(
-    vm: SensorViewModel // kept for later use but not used now
+    vm: SensorViewModel
 ) {
+    // Collect flows from the ViewModel
+    val state by vm.state.collectAsState()
+    val interval by vm.interval.collectAsState()
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Sensor Home") }
+                title = { Text("Sensor Home") },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             )
         }
     ) { padding ->
@@ -74,82 +56,172 @@ fun AppScreen(
             Text(
                 text = "Arm Angle Trainer",
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-
             // ---------------------------------------------------
-            // TIME WINDOW SECTION (placeholder)
+            // TIME WINDOW SELECTOR
             // ---------------------------------------------------
             Text(
-                text = "Time Window (placeholder)",
-                style = MaterialTheme.typography.titleMedium
+                text = "Select Duration",
+                style = MaterialTheme.typography.labelLarge
             )
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .border(1.dp, Color.Gray)
-                    .background(Color.LightGray.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
-                Text("1s / 10s")
-            }
+                TimeSet.values().forEach { mode ->
+                    val isSelected = (interval == mode)
+                    val label = if (mode == TimeSet.SHORT) "Short (1s)" else "Long (10s)"
 
+                    // Changing logic: only allow changing mode if NOT measuring
+                    val enabled = !state.isMeasuring
+
+                    OutlinedButton(
+                        onClick = { vm.setTimeSet(mode) }, // Make sure you added setTimeSet to interface!
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp),
+                        enabled = enabled,
+                        colors = if (isSelected) {
+                            ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        }
+                    ) {
+                        Text(label)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-
             // ---------------------------------------------------
-            // GRAPH PLACEHOLDER
+            // LIVE DATA DISPLAY (Angle 1, Angle 2, Timestamp, Status)
             // ---------------------------------------------------
-            Text(
-                text = "Graph (placeholder)",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .border(1.dp, Color.Gray)
-                    .background(Color.LightGray.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Text("Graph goes here")
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Live Sensor Data",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        DataField("Algo 1 (Accel)", "%.1f°".format(state.currentAlgo1Angle))
+                        DataField("Algo 2 (Fusion)", "%.1f°".format(state.currentAlgo2Angle))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Simple Timestamp (ns -> seconds for display)
+                        val seconds = state.currentTimeStamp / 1_000_000_000.0
+                        // Just showing raw seconds for debugging/visual feedback
+                        DataField("Timestamp", "%.2fs".format(seconds))
+
+                        // Status Badge
+                        StatusBadge(isMeasuring = state.isMeasuring)
+                    }
+                }
             }
 
-
-            Spacer(modifier = Modifier.height(32.dp))
-
+            Spacer(modifier = Modifier.weight(1f)) // Push button to bottom area
 
             // ---------------------------------------------------
-            // MEASUREMENT CONTROL SECTION (placeholder)
+            // START / STOP BUTTON
             // ---------------------------------------------------
-            Text(
-                text = "Measurement Controls (placeholder)",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Box(
+            Button(
+                onClick = {
+                    if (state.isMeasuring) {
+                        vm.stopMeasurement()
+                    } else {
+                        vm.startMeasurement()
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
-                    .border(1.dp, Color.Gray)
-                    .background(Color.LightGray.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (state.isMeasuring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                )
             ) {
-                Text("Start / Stop")
+                Text(
+                    text = if (state.isMeasuring) "STOP MEASUREMENT" else "START RECORDING",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
+        }
+    }
+}
+
+// Helper Composable for Data Fields
+@Composable
+fun DataField(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+// Helper Composable for Status Badge
+@Composable
+fun StatusBadge(isMeasuring: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (isMeasuring) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.errorContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        if (isMeasuring) Color.Green else Color.Red,
+                        shape = RoundedCornerShape(50)
+                    )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (isMeasuring) "Running" else "Stopped",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

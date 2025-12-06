@@ -2,30 +2,26 @@ package com.example.sensors.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.sensors.SensorApplication
 import com.example.sensors.core.AngleCalculator
-import com.example.sensors.core.MeasuredResult
-import com.example.sensors.core.SensorReader
 import com.example.sensors.core.TimeSet
 import com.example.sensors.core.sensors.SensorRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 interface SensorViewModel {
-    // MeasuredResult
-    // Enum shortMeasure / longMeasure
-    // isRunning bool
-    //val uiState: StateFlow<SensorUiState>
+    val state: StateFlow<SensorUiState>
+    val interval: StateFlow<TimeSet>
 
-    //fun start()
-    //fun stop()
-    //fun setTimeSet(mode: TimeSet)
+    fun setTimeSet(timeSet: TimeSet)
+    fun startMeasurement()
+    fun stopMeasurement()
 }
 
 class SensorVM (
@@ -33,37 +29,68 @@ class SensorVM (
     private val angleCalculator: AngleCalculator
 ): SensorViewModel, ViewModel() {
 
-    //private StateFlow, uiState, history(for
+    private val _state = MutableStateFlow(SensorUiState())
+    override val state: StateFlow<SensorUiState>
+        get() = _state.asStateFlow()
 
-    private val _algo1Angle = MutableStateFlow(0f)
-    val algo1Angle: StateFlow<Float> = _algo1Angle
+    private val _interval = MutableStateFlow(TimeSet.LONG)
+    override val interval: StateFlow<TimeSet>
+        get() = _interval.asStateFlow()
 
-    private val _algo2Angle = MutableStateFlow(0f)
-    val algo2Angle: StateFlow<Float> = _algo2Angle
+    override fun setTimeSet(timeSet: TimeSet) {
+        _interval.value = timeSet
+    }
 
     private var measurementJob: Job? = null
 
-    fun startMeasurement() {
+    override fun startMeasurement() {
         if (measurementJob != null) return
 
+        _state.value = _state.value.copy(
+            isMeasuring = true,
+            currentAlgo1Angle = 0f,
+            currentAlgo2Angle = 0f
+        )
+
         measurementJob = viewModelScope.launch {
+
             val rawFlow = sensorRepository.getSensorEvents()
+            var startTimestamp = 0L
+            val durationLimitSeconds = when (_interval.value) {
+                TimeSet.SHORT -> 1f
+                TimeSet.LONG -> 10f
+            }
+
             angleCalculator.process(rawFlow).collect { result ->
-                _algo1Angle.value = result.algo1Angle
-                _algo2Angle.value = result.algo2Angle
-                // also append result to a list for CSV export if needed
+
+                if (startTimestamp == 0L) {
+                    startTimestamp = result.timestamp
+                }
+
+                val elapsedSeconds = (result.timestamp - startTimestamp) / 1_000f
+
+                if (elapsedSeconds >= durationLimitSeconds) {
+                    stopMeasurement()
+                    return@collect
+                }
+
+                _state.value = _state.value.copy(
+                    currentAlgo1Angle = result.algo1Angle,
+                    currentAlgo2Angle = result.algo2Angle,
+                    currentTimeStamp = result.timestamp
+                )
+
+                // CSV SAVE GOES HERE
             }
         }
     }
 
-    fun stopMeasurement() {
+    override fun stopMeasurement() {
+        _state.value = _state.value.copy(isMeasuring = false)
         measurementJob?.cancel()
         measurementJob = null
     }
 
-    //fun cutOff cut the user of when timer limit is hit
-
-    //fun collectStates
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
@@ -80,38 +107,34 @@ class SensorVM (
     }
 
     init {
-        viewModelScope.launch { }
-        //viewModelScope.launch { }
         //viewModelScope.launch { }
     }
-
-
 }
 
 data class SensorUiState(
     val isMeasuring: Boolean = false,
-    val currentAngle: Float? = null,
-    val graphPoints: List<Float> = emptyList(),
+    val currentAlgo1Angle: Float = 0f,
+    val currentAlgo2Angle: Float = 0f,
+    val currentTimeStamp: Long = 0L,
     val timeSet: TimeSet = TimeSet.SHORT,
-    val timeWindowSeconds: Int = 1,
-    val hasData: Boolean = false
 )
 
-class FakeVM (
+class FakeVM() : SensorViewModel {
 
-) : SensorViewModel {
+    override val state = MutableStateFlow(SensorUiState())
 
+    override val interval = MutableStateFlow(TimeSet.LONG)
 
-    /*override fun start() {
-
-    }
-
-    override fun stop() {
+    override fun setTimeSet(timeSet: TimeSet) {
 
     }
 
-    override fun setTimeSet(mode: TimeSet) {
+    override fun startMeasurement() {
 
-    }*/
+    }
+
+    override fun stopMeasurement() {
+
+    }
 
 }

@@ -8,8 +8,8 @@ class AngleCalculator {
     private var currentFusionAngle = 0f
     private var lastTimestamp: Long = 0
 
-    private val aEWMA = 0.1f
-    private val aFusion = 0.98f
+    private val aEWMA = 0.2f
+    private val aFusion = 0.5f
 
     fun process(rawEvents: Flow<ReadSensorEvent>): Flow<MeasuredResult> {
         reset()
@@ -18,7 +18,7 @@ class AngleCalculator {
             val dt = if (lastTimestamp == 0L) {
                 0f
             } else {
-                (event.timestamp - lastTimestamp) / 1_000_000f
+                (event.timestamp - lastTimestamp) / 1_000f
             }
             lastTimestamp = event.timestamp
 
