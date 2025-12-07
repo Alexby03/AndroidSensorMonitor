@@ -1,5 +1,7 @@
 package com.example.sensors.viewmodels
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -7,6 +9,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.sensors.SensorApplication
 import com.example.sensors.core.AngleCalculator
+import com.example.sensors.core.MeasuredResult
 import com.example.sensors.core.TimeSet
 import com.example.sensors.core.sensors.SensorRepository
 import kotlinx.coroutines.Job
@@ -22,6 +25,7 @@ interface SensorViewModel {
     fun setTimeSet(timeSet: TimeSet)
     fun startMeasurement()
     fun stopMeasurement()
+    fun saveCsvToUri(context: Context, uri: Uri)
 }
 
 class SensorVM (
@@ -41,35 +45,47 @@ class SensorVM (
         _interval.value = timeSet
     }
 
+    private val recordedData = mutableListOf<MeasuredResult>()
     private var measurementJob: Job? = null
 
     override fun startMeasurement() {
         if (measurementJob != null) return
+        recordedData.clear()
+        val durationLimitSeconds = when (_interval.value) {
+            TimeSet.SHORT -> 1f
+            TimeSet.LONG -> 10f
+        }
 
         _state.value = _state.value.copy(
             isMeasuring = true,
+            graphMaxSeconds = durationLimitSeconds,
             currentAlgo1Angle = 0f,
-            currentAlgo2Angle = 0f
+            currentAlgo2Angle = 0f,
+            elapsedSeconds = 0f,
+            graphPoints = emptyList()
         )
 
         measurementJob = viewModelScope.launch {
-
             val rawFlow = sensorRepository.getSensorEvents()
-            var startTimestamp = 0L
-            val durationLimitSeconds = when (_interval.value) {
+
+            var sessionStartTime = 0L
+
+            val durationLimit = when (_interval.value) {
                 TimeSet.SHORT -> 1f
                 TimeSet.LONG -> 10f
             }
 
             angleCalculator.process(rawFlow).collect { result ->
-
-                if (startTimestamp == 0L) {
-                    startTimestamp = result.timestamp
+                if (sessionStartTime == 0L) {
+                    sessionStartTime = result.timestamp
                 }
 
-                val elapsedSeconds = (result.timestamp - startTimestamp) / 1_000f
+                val elapsed = (result.timestamp - sessionStartTime) / 1_000f
 
-                if (elapsedSeconds >= durationLimitSeconds) {
+                recordedData.add(result)
+
+                if (elapsed >= durationLimit) {
+                    _state.value = _state.value.copy(elapsedSeconds = durationLimit)
                     stopMeasurement()
                     return@collect
                 }
@@ -77,10 +93,9 @@ class SensorVM (
                 _state.value = _state.value.copy(
                     currentAlgo1Angle = result.algo1Angle,
                     currentAlgo2Angle = result.algo2Angle,
-                    currentTimeStamp = result.timestamp
+                    elapsedSeconds = elapsed,
+                    graphPoints = _state.value.graphPoints + Pair(elapsed, result.algo2Angle)
                 )
-
-                // CSV SAVE GOES HERE
             }
         }
     }
@@ -91,6 +106,25 @@ class SensorVM (
         measurementJob = null
     }
 
+    override fun saveCsvToUri(context: Context, uri: Uri) {
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                val writer = outputStream.bufferedWriter()
+
+                writer.write("timestamp_ms,algo1_angle,algo2_angle\n")
+
+                val startTime = recordedData.firstOrNull()?.timestamp ?: 0L
+
+                recordedData.forEach { data ->
+                    val t = data.timestamp - startTime
+                    writer.write("$t,${data.algo1Angle},${data.algo2Angle}\n")
+                }
+                writer.flush()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
@@ -105,18 +139,16 @@ class SensorVM (
             }
         }
     }
-
-    init {
-        //viewModelScope.launch { }
-    }
 }
 
 data class SensorUiState(
     val isMeasuring: Boolean = false,
+    val graphMaxSeconds: Float = 1f,
     val currentAlgo1Angle: Float = 0f,
     val currentAlgo2Angle: Float = 0f,
-    val currentTimeStamp: Long = 0L,
+    val elapsedSeconds: Float = 0f,
     val timeSet: TimeSet = TimeSet.SHORT,
+    val graphPoints: List<Pair<Float, Float>> = emptyList()
 )
 
 class FakeVM() : SensorViewModel {
@@ -134,6 +166,10 @@ class FakeVM() : SensorViewModel {
     }
 
     override fun stopMeasurement() {
+
+    }
+
+    override fun saveCsvToUri(context: Context, uri: Uri){
 
     }
 

@@ -8,8 +8,8 @@ class AngleCalculator {
     private var currentFusionAngle = 0f
     private var lastTimestamp: Long = 0
 
-    private val aEWMA = 0.2f
-    private val aFusion = 0.5f
+    private val aEWMA = 0.98f
+    private val aFusion = 0.02f
 
     fun process(rawEvents: Flow<ReadSensorEvent>): Flow<MeasuredResult> {
         reset()
@@ -41,12 +41,9 @@ class AngleCalculator {
     // algorithm #1
     private fun accelerationAngle(ay: Float, az: Float): Float {
         val angle = Math.toDegrees(kotlin.math.atan2(az.toDouble(), ay.toDouble())).toFloat()
-        lastFilteredAcceleratorAngle = if (lastFilteredAcceleratorAngle == 0f && angle > 0f) {
-            angle
-        } else {
-            aEWMA * angle + (1 - aEWMA) * lastFilteredAcceleratorAngle
-        }
-        return lastFilteredAcceleratorAngle
+        val filteredAngle = aEWMA * angle + (1 - aEWMA) * lastFilteredAcceleratorAngle
+        lastFilteredAcceleratorAngle = filteredAngle
+        return filteredAngle
     }
 
     // algorithm #2
